@@ -34,19 +34,22 @@ class FindSphere():
         self.arrival_flag = False
         self.image_pub = rospy.Publisher('/processed_image', Image, queue_size=1)
         #self.vel_pub = rospy.Publisher('/mobile_base/commands/velocity', Twist, queue_size=1)
-        self.vel_pub = rospy.Publisher('/turtle1/cmd_vel', Twist, queue_size=1)
-        #self.vel_pub = rospy.Publisher('/robot1/cmd_vel', Twist, queue_size=1)
+        #self.vel_pub = rospy.Publisher('/turtle1/cmd_vel', Twist, queue_size=1)
+        self.vel_pub = rospy.Publisher('/cmd_vel', Twist, queue_size=1)
         if self.image_type == FindSphere.CAMERA:
             self.capture = cv2.VideoCapture(0)
-            self.orig_img_width = 1280
-            self.orig_img_height = 720
+            #self.orig_img_width = 1280
+            #self.orig_img_height = 720
+            self.orig_img_width = 320
+            self.orig_img_height = 240
             self.capture.set(3, self.orig_img_width)
             self.capture.set(4, self.orig_img_height)
             self.resized_img_width = 160 # must be exactly divisible
-            self.resized_img_height = 90 # must be exactly divisible
+            #self.resized_img_height = 90 # must be exactly divisible
+            self.resized_img_height = 120 # must be exactly divisible
         elif self.image_type == FindSphere.STATIC_IMAGE:
-            self.orig_img_width = 640
-            self.orig_img_height = 480
+            self.orig_img_width = 320
+            self.orig_img_height = 240
             self.resized_img_width = 320 # must be exactly divisible
             self.resized_img_height = 240 # must be exactly divisible
 #            self.input_image_file_name = '/home/upr/Pictures/findsphere_images/20170410/live201704101046230000.jpg'
@@ -67,40 +70,43 @@ class FindSphere():
 #            self.input_image_file_name = '/home/upr/Pictures/findsphere_images/20170410/live201704101047430038.jpg'
 #            self.input_image_file_name = '/home/upr/Pictures/findsphere_images/20170410/live201704101047450039.jpg'
 #            self.input_image_file_name = '/home/upr/Pictures/findsphere_images/20170410/live201704101047570045.jpg'
+            self.input_image_file_name = '/home/qtmember/Pictures/20170425-2/005.jpg'
         elif self.image_type == FindSphere.VIDEO:
-            self.capture = cv2.VideoCapture('/home/upr/Pictures/findsphere_images/20170410vga/20170410vga.avi')
-            self.orig_img_width = 640
-            self.orig_img_height = 480
-            self.capture.set(3, self.orig_img_width)
-            self.capture.set(4, self.orig_img_height)
+            #self.capture = cv2.VideoCapture('/home/upr/Pictures/findsphere_images/20170410vga/20170410vga.avi')
+            self.capture = cv2.VideoCapture('/home/qtmember/Pictures/20170425-2/20170425-2.avi')
+            self.orig_img_width = 320
+            self.orig_img_height = 240
+            #self.capture.set(3, self.orig_img_width)
+            #self.capture.set(4, self.orig_img_height)
             self.resized_img_width = 320 # must be exactly divisible
             self.resized_img_height = 240 # must be exactly divisible
             
 
-        self.yvel_coef = 0.01
-        self.xvel_coef = 0.1
-        self.blur_radius = 2
+        self.yvel_coef = 0.2
+        self.xvel_coef = 0.3
+        self.blur_radius = 10
         self.binimg_thre = 230
         #self.shape_thre = 1
         self.shape_coef = 20.0
         self.max_blob_num = 1000
-        self.ignore_area_lt = 30
-        self.ignore_area_mt = 600
-        self.expanded_rectangle_size = 5
+        self.ignore_area_lt = 4
+        self.ignore_area_mt = 130
+        self.expanded_rectangle_size = 0
         #self.expanded_corner_thre = 150*4
         self.expanded_corner_coef = 1
         self.prev_centroid_area = None
         self.prev_centroid_coef = 0.5
         self.eval_func_thre = 700
-        self.center_line_thre = 30
+        self.center_line_thre = 40
         self.time_print_enum = 0
         self.prev_time = time.time()
         self.prev_biggest_idx = None
         self.keep_move_forward_counter = 0
-        self.keep_move_forward_init = 30
+        self.keep_move_forward_init = 10
         self.keep_move_forward_finished = True
         self.prev_xvel = 0
-
+        self.prev_vel = Twist()
+        
 
     def print_difftime(self):
         self.time_print_enum += 1
@@ -124,9 +130,10 @@ class FindSphere():
         self.prev_centroid_area = blob_centroid_area
 
         self.publish_processed_image(processed_image)
-        
-        if self.move_flag is True:
-            self.publish_vel(blob_centroid_area, biggest_idx, too_big_idxs)
+
+        #print "move_flag="
+        #print self.move_flag
+        self.publish_vel(blob_centroid_area, biggest_idx, too_big_idxs)
 
         if self.arrival_flag is True:
             self.prev_centroid_area = None
@@ -147,7 +154,7 @@ class FindSphere():
         if req.startstop is True:
             rospy.loginfo('received start command')
         else:
-            rospy.sloginfo('received stop command')
+            rospy.loginfo('received stop command')
         return StartStopResponse(result=True)
 
     
@@ -162,10 +169,48 @@ class FindSphere():
     def find_biggest_blob(self, frame):
         self.time_print_enum = 0
         gray_img = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        gray_img = cv2.blur(gray_img, (self.blur_radius,self.blur_radius))
-        cv2.imshow('gray', gray_img)
-        cv2.waitKey(1)
-        ret, binimg = cv2.threshold(gray_img, self.binimg_thre, 255, cv2.THRESH_BINARY)
+        #gray_img = cv2.blur(gray_img, (self.blur_radius,self.blur_radius))
+
+        #hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV_FULL)
+        #h = hsv[:, :, 0]
+        #s = hsv[:, :, 1]
+        #mask = np.zeros(h.shape, dtype=np.uint8)
+
+        mask = np.zeros((frame.shape[0], frame.shape[1]), dtype=np.uint8)
+        for x in range(frame.shape[0]):
+            for y in range(frame.shape[1]):
+                if (frame[x][y][2] > 200) and \
+                   (float(frame[x][y][0]) / frame[x][y][2] < 0.78) and \
+                   (float(frame[x][y][1]) / frame[x][y][2] < 0.78):
+                    mask[x][y] = 255
+                else:
+                    mask[x][y] = 0
+
+
+        # print mask.shape
+
+        #mask[((h < 20) | (h > 200)) & (s > 220)] = 255
+        
+        #cv2.imshow('gray', gray_img)
+        #cv2.waitKey(1)
+
+        #ret, binimg = cv2.threshold(gray_img, self.binimg_thre, 255, cv2.THRESH_BINARY)
+
+
+        
+        #blur_frame = cv2.blur(frame, (self.blur_radius, self.blur_radius))
+        #hsv = cv2.cvtColor(blur_frame, cv2.COLOR_BGR2HSV)
+        #lower_red1 = np.array([160, 10, 80])
+        #lower_red1 = np.array([160, 200, 200])
+        #upper_red1 = np.array([190, 255, 255])
+        #mask = cv2.inRange(hsv, lower_red1, upper_red1)
+
+
+
+
+        
+        binimg = mask
+        
         self.print_difftime()
         #num_labels, label_image = cv2.connectedComponents(binimg)
         label = cv2.connectedComponentsWithStats(binimg)
@@ -174,6 +219,10 @@ class FindSphere():
         blob_centroids = np.delete(label[3], 0, 0)  #not including background
         blob_dims = label[2]  # including background
 
+        
+        
+        
+        
         #blob_idxs = list(set(blob_idxs)) # delete duplicate
         
         #find biggest blob among blobs
@@ -194,8 +243,15 @@ class FindSphere():
             # ignore too small blob
             if blob_dims[i + 1][4] < self.ignore_area_lt:
                 continue
+            # ignore left/right side blobs
+            if (blob_dims[i + 1][0] < 15) or \
+               (blob_dims[i + 1][2] + blob_dims[i+1][0] \
+                > self.orig_img_width - 15):
+                continue
+
             mid_size_blob_idxs.append(i)
 
+            
             # calc shape evaluation value
             blob_upper_height = blob_centroids[i][1] - blob_dims[i + 1][1]
             blob_left_width = blob_centroids[i][0] - blob_dims[i + 1][0]
@@ -345,15 +401,24 @@ class FindSphere():
         
     def publish_vel(self, blob_centroid_area, biggest_idx, too_big_idxs):
         vel = Twist()
+        
+        if self.move_flag == False:
+            if not (self.prev_vel == Twist()):
+                self.vel_pub.publish(vel) # 0 velocity
+                self.prev_vel = vel
+            return
+        
         if blob_centroid_area is None:
             if (self.prev_biggest_idx in too_big_idxs) and \
                (self.prev_xvel > 0):
                 self.keep_move_forward_counter = self.keep_move_forward_init
             if self.keep_move_forward_counter > 0:
-                vel.linear.x = self.xvel_coef
+                #vel.linear.x = self.xvel_coef
+                vel.linear.x = 0
                 self.keep_move_forward_counter -= 1
-                self.keep_move_forward_finished = False
+                self.keep_move_forward_finished = False 
                 self.vel_pub.publish(vel)
+                self.prev_vel = vel
                 self.prev_biggest_idx = biggest_idx
                 self.prev_xvel = vel.linear.x
                 return
@@ -361,45 +426,87 @@ class FindSphere():
                 if (not self.arrival_flag is True) and \
                    (self.keep_move_forward_finished is False):
                     self.keep_move_forward_finished = True
-                    self.move_flag = False
+                    #self.move_flag = False
                     self.arrival_flag = True
                     rospy.loginfo('arrived2')
+                    print 'arrived2'
+                    vel = Twist()
                     self.vel_pub.publish(vel)  # 0 velocity
+                    self.prev_vel = vel
                     self.prev_biggest_idx = biggest_idx
                     return
                 print 'not publish velocity'
+                vel = Twist()
+                self.vel_pub.publish(vel) # 0 velocity
+                self.prev_vel = vel
                 return
         if abs((self.orig_img_width / 2) - blob_centroid_area[0]) \
            < self.center_line_thre:
-            vel.linear.x = self.xvel_coef
+            if self.prev_vel.linear.y != 0:
+                vel.linear.x = 0
+                self.vel_pub.publish(vel)
+                self.prev_vel = vel
+                self.prev_biggest_idx = biggest_idx
+                self.prev_xvel = vel.linear.x
+                time.sleep(0.7)
+            else:
+                vel.linear.x = self.xvel_coef
+                self.vel_pub.publish(vel)
+                self.prev_vel = vel
+                self.prev_biggest_idx = biggest_idx
+                self.prev_xvel = vel.linear.x
+
+                
         else:
             if (self.prev_biggest_idx in too_big_idxs) and \
                (self.prev_xvel > 0):
                 self.keep_move_forward_counter = self.keep_move_forward_init
                 
             if self.keep_move_forward_counter > 0:
-                vel.linear.x = self.xvel_coef
+                #vel.linear.x = self.xvel_coef
+                vel.linear.x = 0
                 self.keep_move_forward_counter -= 1
                 self.keep_move_forward_finished = False
+                self.vel_pub.publish(vel)
+                self.prev_vel = vel
+                self.prev_biggest_idx = biggest_idx
+                self.prev_xvel = vel.linear.x
 
             else:
                 if (not self.arrival_flag is True) and\
                    (self.keep_move_forward_finished is False):
                     self.keep_move_forward_finished = True
-                    self.move_flag = False
+                    #self.move_flag = False
                     self.arrival_flag = True
                     rospy.loginfo('arrived1')
+                    print 'arrived1'
+                    vel = Twist()
                     self.vel_pub.publish(vel)  # 0 velocity
+                    self.prev_vel = vel
                     self.prev_biggest_idx = biggest_idx
                     return
 
-                yvel = ((self.orig_img_width / 2) - blob_centroid_area[0]) \
-                       * self.yvel_coef
-                #vel.linear.y = yvel
-                vel.angular.z = yvel
-        self.vel_pub.publish(vel)
-        self.prev_biggest_idx = biggest_idx
-        self.prev_xvel = vel.linear.x
+                #yvel = ((self.orig_img_width / 2) - blob_centroid_area[0]) \
+                #       * self.yvel_coef
+                if ((self.orig_img_width / 2) - blob_centroid_area[0]) >= 0:
+                    yvel = self.yvel_coef
+                else:
+                    yvel = -1 * self.yvel_coef
+
+                if self.prev_vel.linear.x != 0:
+                    vel.linear.y = 0
+                    self.vel_pub.publish(vel)
+                    self.prev_vel = vel
+                    self.prev_biggest_idx = biggest_idx
+                    self.prev_xvel = vel.linear.x
+                    time.sleep(0.7)
+                else:
+                    vel.linear.y = yvel
+                    #vel.angular.z = yvel
+                    self.vel_pub.publish(vel)
+                    self.prev_vel = vel
+                    self.prev_biggest_idx = biggest_idx
+                    self.prev_xvel = vel.linear.x
 
 
     def cleanup(self):
@@ -409,10 +516,10 @@ class FindSphere():
         
 if __name__ == '__main__':
     try:
-        findsphere = FindSphere(image_type = FindSphere.VIDEO)
-        #findsphere = FindSphere(image_type = FindSphere.CAMERA)
+        #findsphere = FindSphere(image_type = FindSphere.VIDEO)
+        findsphere = FindSphere(image_type = FindSphere.CAMERA)
         #findsphere = FindSphere(image_type = FindSphere.STATIC_IMAGE)
-        rate = rospy.Rate(15)
+        rate = rospy.Rate(5)
         prevtime = time.time()
         while not rospy.is_shutdown():
             findsphere.capture_and_process()
